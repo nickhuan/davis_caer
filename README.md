@@ -5,12 +5,14 @@ The davis_caer package creates ROS node davis_caer, publishing topic davis_frame
 davis_frame is a stream of images of type mono16 and dimensions 180*240.
 
 
-Installing (with ROS):
-cd ~/catkin_ws/src  
-git clone https://github.com/nickhuan/davis_caer.git
-Compiling (catkin):
-cd ~/catkin_ws  
-catkin_make davis_caer
-Running:
-roscore
-rosrun davis_caer davis_caer
+Installing (with ROS):    
+	cd ~/catkin_ws/src  
+	git clone https://github.com/nickhuan/davis_caer.git    
+	
+Compiling (catkin):    
+	cd ~/catkin_ws  
+	catkin_make davis_caer
+	
+Running:    
+	roscore
+	rosrun davis_caer davis_caer
