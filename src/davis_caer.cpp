@@ -73,11 +73,10 @@ int main(int argc, char *argv[])
 	}
 
 	// 64K data buffer should be enough for the TCP event packets.
-	size_t dataBufferLength = 1024 * 64;
+	// 64K not enough --> Segmentation Fault (core dump)
+	// at least 192K needed, here 256K is used
+	size_t dataBufferLength = 1024 * 64 * 4;
 	uint8_t *dataBuffer = (uint8_t*)malloc(dataBufferLength);
-
-	//The line somehow solved the bug: "Segmentation Fault (core dump)". Don't know why.
-	cv::namedWindow ( "Davis frame" , 1 );
 
 	/******************************image******************************/
 
@@ -86,7 +85,6 @@ int main(int argc, char *argv[])
 	ros::NodeHandle nh;
 	image_transport::ImageTransport it(nh);
 	image_transport::Publisher pub = it.advertise("davis_frame", 1);
-//	ros::Rate loop_rate(1.0);
 
 	while (ros::ok())
 	{
@@ -108,43 +106,32 @@ int main(int argc, char *argv[])
 		uint32_t eventNumber = caerEventPacketHeaderGetEventNumber(header);
 		uint32_t eventValid = caerEventPacketHeaderGetEventValid(header);
 
-		printf("type = %" PRIu16 ", source = %" PRIu16 ", size = %" PRIu32 ", tsOffset = %" PRIu32 ", capacity = %" PRIu32 ", number = %" PRIu32 ", valid = %" PRIu32 ".\n",
-			eventType, eventSource, eventSize, eventTSOffset, eventCapacity, eventNumber, eventValid);
-
 		// Get rest of event packet, the part with the events themselves.
-		if (!recvUntilDone(listenTCPSocket, dataBuffer + sizeof(struct caer_event_packet_header),
-			eventCapacity * eventSize))
+		if (!recvUntilDone(listenTCPSocket, dataBuffer + sizeof(struct caer_event_packet_header), eventCapacity * eventSize))
 		{
 			fprintf(stderr, "Error in recv() call: %d\n", errno);
 			break;
 		}
 
+		//Check if there is a valid event
 		if (eventValid > 0)
 		{
-			void *firstEvent = caerGenericEventGetEvent(header, 0);
-			void *lastEvent = caerGenericEventGetEvent(header, eventValid - 1);
-			uint32_t firstTS = caerGenericEventGetTimestamp(firstEvent, header);
-			uint32_t lastTS = caerGenericEventGetTimestamp(lastEvent, header);
-			uint32_t tsDifference = lastTS - firstTS;
-
-			printf("Time difference in packet: %" PRIu32 " (first = %" PRIu32 ", last = %" PRIu32 ").\n", tsDifference,
-				firstTS, lastTS);
-
-			//todo: for loop, iterate through all events
-			//todo: check if event type is frame (4)
-			if (eventType == 4)
+			//Check if event type is frame event (4)
+			if (eventType == FRAME_EVENT)
 			{
-			uint16_t *pixels = caerFrameEventGetPixelArrayUnsafe((caer_frame_event*)firstEvent);
-			cv::Mat img(180,240,CV_16UC1,pixels);
-			int k = img.at<int>(90,120);
-			printf("img[90,120]=%d",k);
-			sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "mono16", img).toImageMsg();
-			pub.publish(msg);
-			ros::spinOnce();
+				//iterate for all events
+				for (int i = 0; i < eventValid; i++)
+				{
+				void *istEvent = caerGenericEventGetEvent(header, i);
+				uint16_t *pixels = caerFrameEventGetPixelArrayUnsafe((caer_frame_event*)istEvent);
+				cv::Mat img(180,240,CV_16UC1,pixels);
+				int k = img.at<int>(90,120);
+				printf("img[90,120]=%d\n",k);
+				sensor_msgs::ImagePtr msg = cv_bridge::CvImage(std_msgs::Header(), "mono16", img).toImageMsg();
+				pub.publish(msg);
+				ros::spinOnce();
+				}
 			}
-//			loop_rate.sleep();
-//			ros::spin();
-
 		}
 
 		printf("\n\n");
